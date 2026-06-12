@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shieldnet-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shieldnet
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  ml-service:
+    build: ./ml-service
+    container_name: shieldnet-ml
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ml-service/models:/app/models
+    environment:
+      MODEL_DIR: /app/models
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  backend:
+    build: ./backend
+    container_name: shieldnet-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - ml-service
+    environment:
+      PORT: 5000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: shieldnet
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: change_this_secret_in_production
+      ML_SERVICE_URL: http://ml-service:8000
+      FRONTEND_URL: http://localhost:5173
+
+  frontend:
+    build: ./frontend
+    container_name: shieldnet-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
